@@ -1,0 +1,365 @@
+/* ─── Reset & Base ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0e1a;
+  --bg-panel: #0f1625;
+  --bg-table-head: #141c2e;
+  --bg-row-even: #111827;
+  --bg-row-hover: #1a2440;
+  --border: #1e2d4a;
+  --accent: #1e90ff;
+  --accent2: #00c8ff;
+  --text-primary: #e8edf5;
+  --text-secondary: #8899bb;
+  --text-muted: #4a5a78;
+
+  --green:  #00e676;
+  --yellow: #ffd740;
+  --red:    #ff5252;
+  --blue:   #40c4ff;
+  --purple: #ce93d8;
+  --gray:   #78909c;
+  --orange: #ffab40;
+
+  font-family: 'Segoe UI', 'Inter', system-ui, Arial, sans-serif;
+  font-size: 20px;
+  color: var(--text-primary);
+  background-color: var(--bg);
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── App Shell ─────────────────────────────────────────────── */
+.app, .App {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  padding: 1rem;
+  gap: 1rem;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────── */
+.kiosk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background: #ffffff;
+  border-bottom: 3px solid var(--accent);
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.airport-logo {
+  height: 5rem;
+  width: auto;
+  object-fit: contain;
+}
+
+.header-titles h1 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: 0.04em;
+}
+
+.airlines-label {
+  font-size: 1rem;
+  color: #4b5563;
+  margin-top: 0.2rem;
+}
+
+.clock {
+  font-size: 2.6rem;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+
+.date {
+  font-size: 1rem;
+  color: #4b5563;
+  text-align: right;
+}
+
+.last-updated {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.refresh-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+.refresh-btn:hover { background: #f3f4f6; }
+
+
+/* ─── Main Grid ──────────────────────────────────────────────────── */
+main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.tables-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+/* ─── Flight Table Container ─────────────────────────────────────── */
+.flight-table-container {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-panel);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.flight-table-container h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent2);
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Table title row with icon + count badge */
+.table-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-table-head);
+  flex-shrink: 0;
+}
+.table-title-row h2 {
+  flex: 1;
+  font-size: 1.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent2);
+  border-bottom: none;
+  padding: 0;
+}
+.table-icon { font-size: 1.8rem; }
+.flight-count {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 0.15rem 0.75rem;
+}
+
+/* Scrollable tbody wrapper */
+.table-body-wrapper {
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Airline colored badge — replaces img logos */
+.airline-logo {
+  height: 2.4rem;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Fallback text badge for unknown carriers */
+.airline-badge {
+  display: inline-block;
+  padding: 0.35rem 0.9rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.flight-cell {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fff;
+}
+
+.time-cell {
+  font-weight: 600;
+  color: var(--accent2);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.time-with-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.day-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 1.35rem;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0b3a5c;
+  background: #7ee7ff;
+  border: 1px solid #3cb8e0;
+}
+
+.actual-time {
+  color: var(--text-secondary) !important;
+  font-style: italic;
+}
+
+/* ─── Table ──────────────────────────────────────────────────────── */
+.flight-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.flight-table thead th {
+  background: var(--bg-table-head);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.9rem 1.25rem;
+  text-align: left;
+}
+
+.flight-table tbody {
+  display: block;
+  overflow-y: auto;
+  height: calc(100vh - 16rem);
+}
+
+.flight-table thead, .flight-table tbody tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+
+.flight-table td {
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.25rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flight-table tbody tr:nth-child(even) {
+  background: var(--bg-row-even);
+}
+
+.flight-table tbody tr:hover {
+  background: var(--bg-row-hover);
+}
+
+.status {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 1.05rem;
+}
+
+/* ─── Status Colors ──────────────────────────────────────────────── */
+.status.on-time, .status.scheduled { color: var(--green); }
+.status.landed, .status.arrived { color: var(--green); }
+.status.en-route, .status.departed, .status.filed { color: var(--blue); }
+.status.delayed { color: var(--yellow); }
+.status.cancelled { color: var(--red); }
+.status.diverted { color: var(--orange); }
+
+
+/* ─── Etc ────────────────────────────────────────────────────────── */
+.fullscreen-btn {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--bg-panel);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+  z-index: 100;
+}
+.fullscreen-btn:hover { opacity: 1; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+.single-table-view {
+  display: block;
+  width: 100%;
+}
+
+.slide-view {
+  opacity: 1;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.fade-in {
+  opacity: 1;
+}
+
+.fade-out {
+  opacity: 0;
+}
