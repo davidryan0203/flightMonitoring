@@ -22,8 +22,8 @@ const PORT         = 3001;
 // Public folder — JSON files are written here so the browser can fetch them
 const PUBLIC_DIR   = path.join(__dirname, 'public');
 
-// How often to fetch fresh flight data from the API (every 15 minutes)
-const FETCH_INTERVAL_MS = 15 * 60 * 1000;
+// How often to fetch fresh flight data from the API (every 30 minutes)
+const FETCH_INTERVAL_MS = 30 * 60 * 1000;
 
 // ─── SSE Client Registry ──────────────────────────────────────────────────────
 // Keeps a Set of active SSE response objects. When new data is ready, we
@@ -147,7 +147,7 @@ async function fetchAndSaveFlightData() {
 }
 
 // ─── Scheduler ───────────────────────────────────────────────────────────────
-// Fetches fresh data immediately on startup, then repeats every 15 minutes.
+// Fetches fresh data immediately on startup, then repeats every 30 minutes.
 // After each successful fetch, all connected browser tabs are notified via SSE
 // and silently re-fetch the updated JSON files.
 function startScheduler() {
