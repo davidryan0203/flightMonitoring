@@ -3,7 +3,7 @@ import gooseBayLogo from '../img/goose-bay-airport.jpeg';
 
 const AIRLINES = ['Air Canada', 'PAL Airlines', 'Air Borealis'];
 
-const Header = ({ lastUpdated, onRefresh }) => {
+const Header = ({ lastUpdated, onRefresh, isRefreshing, onOpenAdmin }) => {
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -35,7 +35,12 @@ const Header = ({ lastUpdated, onRefresh }) => {
               Updated: {lastUpdated.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <button className="refresh-btn" onClick={onRefresh} title="Refresh now">↻</button>
+          <button className="refresh-btn" onClick={onRefresh} title="Refresh now" disabled={isRefreshing}>
+            {isRefreshing ? '...' : '↻'}
+          </button>
+          <button className="admin-btn" onClick={onOpenAdmin} title="Open admin controls">
+            Admin
+          </button>
         </div>
       </div>
     </header>

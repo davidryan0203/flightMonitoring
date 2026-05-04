@@ -112,6 +112,12 @@ body {
   color: #6b7280;
 }
 
+.update-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .refresh-btn {
   background: none;
   border: 1px solid #d1d5db;
@@ -122,6 +128,25 @@ body {
   font-size: 1.1rem;
 }
 .refresh-btn:hover { background: #f3f4f6; }
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.admin-btn {
+  border: 1px solid #0f3a87;
+  background: #0b4ec4;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.admin-btn:hover {
+  background: #0a44aa;
+}
 
 
 /* ─── Main Grid ──────────────────────────────────────────────────── */
@@ -362,4 +387,162 @@ main {
 
 .fade-out {
   opacity: 0;
+}
+
+.admin-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 11, 20, 0.72);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 200;
+}
+
+.admin-panel {
+  width: min(38rem, 96vw);
+  height: 100%;
+  overflow-y: auto;
+  background: #f6f8fc;
+  color: #111827;
+  padding: 1rem;
+  border-left: 3px solid #0b4ec4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.admin-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-panel-header h3 {
+  font-size: 1.2rem;
+}
+
+.admin-close-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+
+.admin-section {
+  background: #fff;
+  border: 1px solid #d8e1f1;
+  border-radius: 8px;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.admin-section h4 {
+  font-size: 1rem;
+  color: #0b4ec4;
+}
+
+.admin-section label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.88rem;
+}
+
+.admin-section input,
+.admin-section select,
+.admin-section button {
+  font: inherit;
+}
+
+.admin-section input[type='text'],
+.admin-section input[type='number'],
+.admin-section input:not([type]),
+.admin-section select {
+  border: 1px solid #c3cedf;
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  background: #fff;
+}
+
+.admin-section button {
+  align-self: flex-start;
+  border: 1px solid #0f3a87;
+  background: #0b4ec4;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+.admin-section button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.admin-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.admin-form .admin-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.secondary-btn {
+  background: #eef2f8 !important;
+  color: #1f2937 !important;
+  border-color: #c8d4e7 !important;
+}
+
+.danger-btn {
+  background: #c43337 !important;
+  border-color: #932328 !important;
+}
+
+.admin-flight-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.admin-flight-list li {
+  border: 1px solid #d5def0;
+  border-radius: 6px;
+  padding: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.admin-list-meta {
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.admin-list-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.admin-action-message {
+  font-size: 0.88rem;
+  color: #0f3a87;
+}
+
+@media (max-width: 900px) {
+  .admin-form {
+    grid-template-columns: 1fr;
+  }
+
+  .update-info {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }

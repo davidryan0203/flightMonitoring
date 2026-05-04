@@ -22,8 +22,19 @@ const PORT         = 3001;
 // Public folder — JSON files are written here so the browser can fetch them
 const PUBLIC_DIR   = path.join(__dirname, 'public');
 
-// How often to fetch fresh flight data from the API (every 30 minutes)
-const FETCH_INTERVAL_MS = 30 * 60 * 1000;
+const ADMIN_DATA_PATH = path.join(__dirname, 'admin_data.json');
+
+const DEFAULT_ADMIN_DATA = {
+  displaySettings: {
+    showApiFlights: true,
+    showCustomFlights: true,
+    maxRowsPerTable: 20,
+  },
+  customFlights: {
+    arrivals: [],
+    departures: [],
+  },
+};
 
 // ─── SSE Client Registry ──────────────────────────────────────────────────────
 // Keeps a Set of active SSE response objects. When new data is ready, we
@@ -35,6 +46,74 @@ function broadcastReload() {
   for (const client of sseClients) {
     client.write('event: reload\ndata: true\n\n');
   }
+}
+
+function loadAdminData() {
+  try {
+    if (!fs.existsSync(ADMIN_DATA_PATH)) {
+      fs.writeFileSync(ADMIN_DATA_PATH, JSON.stringify(DEFAULT_ADMIN_DATA, null, 2), 'utf-8');
+      return structuredClone(DEFAULT_ADMIN_DATA);
+    }
+
+    const raw = JSON.parse(fs.readFileSync(ADMIN_DATA_PATH, 'utf-8'));
+    return {
+      displaySettings: {
+        ...DEFAULT_ADMIN_DATA.displaySettings,
+        ...(raw.displaySettings ?? {}),
+      },
+      customFlights: {
+        arrivals: Array.isArray(raw.customFlights?.arrivals) ? raw.customFlights.arrivals : [],
+        departures: Array.isArray(raw.customFlights?.departures) ? raw.customFlights.departures : [],
+      },
+    };
+  } catch (err) {
+    console.error('❌ Failed to load admin_data.json:', err.message);
+    return structuredClone(DEFAULT_ADMIN_DATA);
+  }
+}
+
+function saveAdminData(data) {
+  fs.writeFileSync(ADMIN_DATA_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+let adminData = loadAdminData();
+
+function sanitizeCustomFlight(payload = {}, type) {
+  const base = {
+    id: payload.id ?? `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    flight: String(payload.flight ?? '').trim(),
+    airline: String(payload.airline ?? '').trim(),
+    actual: String(payload.actual ?? '').trim(),
+    status: String(payload.status ?? 'Scheduled').trim() || 'Scheduled',
+    isTomorrow: Boolean(payload.isTomorrow),
+  };
+
+  if (type === 'arrivals') {
+    return {
+      ...base,
+      from: String(payload.from ?? '').trim(),
+      expected: String(payload.expected ?? '').trim(),
+    };
+  }
+
+  return {
+    ...base,
+    to: String(payload.to ?? '').trim(),
+    schedule: String(payload.schedule ?? '').trim(),
+  };
+}
+
+function validateCustomFlight(flight, type) {
+  if (!flight.flight) return 'Flight number is required.';
+  if (!flight.airline) return 'Airline is required.';
+  if (type === 'arrivals') {
+    if (!flight.from) return 'Origin is required for arrivals.';
+    if (!flight.expected) return 'Expected time is required for arrivals.';
+  } else {
+    if (!flight.to) return 'Destination is required for departures.';
+    if (!flight.schedule) return 'Schedule time is required for departures.';
+  }
+  return null;
 }
 
 // ─── SSE Endpoint ─────────────────────────────────────────────────────────────
@@ -57,42 +136,6 @@ app.get('/api/events', (req, res) => {
     console.log(`❌ SSE client disconnected (total: ${sseClients.size})`);
   });
 });
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const ALLOWED_OPERATORS   = new Set(['PVL', 'PB', 'ACA', 'AC']);
-const AIR_BOREALIS_CITIES = new Set(['Nain', 'Postville', 'Rigolet', 'Makkovik', 'Natuashish', 'Hopedale']);
-const EXCLUDED_ORIGIN     = 'CVB2';
-
-function formatApiDatetime(isoString) {
-  if (!isoString) return '';
-  try {
-    return new Date(isoString).toLocaleTimeString('en-CA', {
-      timeZone: TIMEZONE, hour: 'numeric', minute: '2-digit', hour12: true,
-    });
-  } catch { return ''; }
-}
-
-function deriveStatus(scheduledIso, estimatedIso) {
-  if (!scheduledIso || !estimatedIso) return 'Scheduled';
-  const diff = (new Date(estimatedIso) - new Date(scheduledIso)) / 60000;
-  if (diff > 1)  return 'Delayed';
-  if (diff < -1) return 'Early';
-  return 'On Time';
-}
-
-function resolveAirline(city) {
-  if (city === 'Halifax') return 'Air Canada';
-  if (AIR_BOREALIS_CITIES.has(city)) return 'Air Borealis';
-  return 'PAL Airlines';
-}
-
-function isAllowedOperator(flight) {
-  return (
-    ALLOWED_OPERATORS.has(flight.operator      ?? '') ||
-    ALLOWED_OPERATORS.has(flight.operator_icao ?? '') ||
-    ALLOWED_OPERATORS.has(flight.operator_iata ?? '')
-  );
-}
 
 // ─── API Fetch & Write ────────────────────────────────────────────────────────
 /**
@@ -129,6 +172,12 @@ async function fetchAndSaveFlightData() {
 
     // Tell all open browser tabs to re-fetch the new JSON files
     broadcastReload();
+
+    return {
+      success: true,
+      arrivals: (arrivalsData.scheduled_arrivals ?? []).length,
+      departures: (departuresData.scheduled_departures ?? []).length,
+    };
   } catch (err) {
     console.error('❌ fetchAndSaveFlightData error:', err.message);
 
@@ -140,28 +189,128 @@ async function fetchAndSaveFlightData() {
     if (fs.existsSync(arrivalsPath) && fs.existsSync(departuresPath)) {
       console.warn('⚠️  Using cached local JSON files (API unavailable).');
       broadcastReload(); // browsers will re-fetch the existing public/ files
+      return { success: false, fallback: true, error: err.message };
     } else {
       console.error('❌ No cached JSON files found in public/ — display will remain empty.');
+      return { success: false, fallback: false, error: err.message };
     }
   }
 }
 
 // ─── Scheduler ───────────────────────────────────────────────────────────────
-// Fetches fresh data immediately on startup, then repeats every 30 minutes.
+// Fetches fresh data immediately on startup, then every day at 03:00 local time.
 // After each successful fetch, all connected browser tabs are notified via SSE
 // and silently re-fetch the updated JSON files.
+function msUntilNext3AM() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(3, 0, 0, 0);
+  if (next <= now) {
+    next.setDate(next.getDate() + 1);
+  }
+  return next.getTime() - now.getTime();
+}
+
 function startScheduler() {
-  console.log(`⏰ Scheduler started — fetching every ${FETCH_INTERVAL_MS / 60000} minutes`);
+  console.log('⏰ Scheduler started — daily fetch at 3:00 AM (server local time)');
   fetchAndSaveFlightData(); // run immediately on startup
-  setInterval(fetchAndSaveFlightData, FETCH_INTERVAL_MS);
+
+  const scheduleNextRun = () => {
+    const waitMs = msUntilNext3AM();
+    const nextRun = new Date(Date.now() + waitMs);
+    console.log(`🗓️  Next scheduled fetch at ${nextRun.toLocaleString('en-CA')}`);
+
+    setTimeout(async () => {
+      await fetchAndSaveFlightData();
+      scheduleNextRun();
+    }, waitMs);
+  };
+
+  scheduleNextRun();
 }
 
 // ─── Manual Trigger Endpoint (admin/testing) ──────────────────────────────────
-// Hit POST /api/refresh to trigger an immediate data fetch without waiting for 2 AM.
+// Hit POST /api/refresh to trigger an immediate data fetch without waiting for 3 AM.
 app.post('/api/refresh', async (req, res) => {
   console.log('🔁 Manual refresh triggered via POST /api/refresh');
-  res.json({ message: 'Refresh started' });
-  await fetchAndSaveFlightData();
+  const result = await fetchAndSaveFlightData();
+  res.json({ message: 'Refresh complete', ...result });
+});
+
+app.get('/api/admin/state', (req, res) => {
+  res.json(adminData);
+});
+
+app.put('/api/admin/display-settings', (req, res) => {
+  const payload = req.body ?? {};
+  const maxRowsRaw = Number(payload.maxRowsPerTable);
+  adminData.displaySettings = {
+    showApiFlights: payload.showApiFlights !== undefined ? Boolean(payload.showApiFlights) : adminData.displaySettings.showApiFlights,
+    showCustomFlights: payload.showCustomFlights !== undefined ? Boolean(payload.showCustomFlights) : adminData.displaySettings.showCustomFlights,
+    maxRowsPerTable: Number.isFinite(maxRowsRaw) ? Math.max(1, Math.min(100, Math.floor(maxRowsRaw))) : adminData.displaySettings.maxRowsPerTable,
+  };
+  saveAdminData(adminData);
+  broadcastReload();
+  res.json(adminData.displaySettings);
+});
+
+app.post('/api/admin/flights/:type', (req, res) => {
+  const type = req.params.type;
+  if (type !== 'arrivals' && type !== 'departures') {
+    return res.status(400).json({ error: 'Type must be arrivals or departures.' });
+  }
+
+  const flight = sanitizeCustomFlight(req.body, type);
+  const error = validateCustomFlight(flight, type);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  adminData.customFlights[type].push(flight);
+  saveAdminData(adminData);
+  broadcastReload();
+  return res.status(201).json(flight);
+});
+
+app.put('/api/admin/flights/:type/:id', (req, res) => {
+  const { type, id } = req.params;
+  if (type !== 'arrivals' && type !== 'departures') {
+    return res.status(400).json({ error: 'Type must be arrivals or departures.' });
+  }
+
+  const index = adminData.customFlights[type].findIndex((f) => f.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Flight not found.' });
+  }
+
+  const updated = sanitizeCustomFlight({ ...adminData.customFlights[type][index], ...req.body, id }, type);
+  const error = validateCustomFlight(updated, type);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  adminData.customFlights[type][index] = updated;
+  saveAdminData(adminData);
+  broadcastReload();
+  return res.json(updated);
+});
+
+app.delete('/api/admin/flights/:type/:id', (req, res) => {
+  const { type, id } = req.params;
+  if (type !== 'arrivals' && type !== 'departures') {
+    return res.status(400).json({ error: 'Type must be arrivals or departures.' });
+  }
+
+  const before = adminData.customFlights[type].length;
+  adminData.customFlights[type] = adminData.customFlights[type].filter((f) => f.id !== id);
+
+  if (adminData.customFlights[type].length === before) {
+    return res.status(404).json({ error: 'Flight not found.' });
+  }
+
+  saveAdminData(adminData);
+  broadcastReload();
+  return res.status(204).send();
 });
 
 // ─── Static File Server ───────────────────────────────────────────────────────

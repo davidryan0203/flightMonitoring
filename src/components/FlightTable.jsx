@@ -70,7 +70,7 @@ const FlightTable = ({ title, flights, type }) => {
               </tr>
             ) : (
               flights.map((flight, index) => (
-                <tr key={`${flight.flight}-${index}`}>
+                <tr key={flight.id ?? `${flight.flight}-${index}`}>
                   <td><AirlineBadge airline={flight.airline} /></td>
                   <td className="flight-cell">{flight.flight}</td>
                   <td>{isArrivals ? (flight.from || '\u2014') : (flight.to || '\u2014')}</td>

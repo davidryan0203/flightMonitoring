@@ -24,11 +24,11 @@ function formatDatetime(isoString) {
   } catch { return ''; }
 }
 
-function deriveStatus(scheduledIso, estimatedIso) {
-  if (!scheduledIso || !estimatedIso) return 'Scheduled';
-  const diff = (new Date(estimatedIso) - new Date(scheduledIso)) / 60000;
-  if (diff > 1)  return 'Delayed';
-  if (diff < -1) return 'Early';
+function deriveStatus(expectedIso, actualIso) {
+  if (!expectedIso || !actualIso) return 'Scheduled';
+  const diff = (new Date(actualIso) - new Date(expectedIso)) / 60000;
+  if (diff >= 20) return 'Delayed';
+  if (diff <= -15) return 'Early';
   return 'On Time';
 }
 
@@ -67,31 +67,33 @@ function normalizeStatus(status = '') {
   return status.trim().toLowerCase();
 }
 
-function computeDisplayStatus(type, rawStatus, scheduledIso, estimatedIso) {
+function computeDisplayStatus(type, rawStatus, expectedIso, actualIso) {
   void type;
 
-  const normalizedStatus = normalizeStatus(rawStatus);
+  const expectedMins = toLocalMinutesOfDay(expectedIso);
+  const actualMins = toLocalMinutesOfDay(actualIso);
 
+  if (expectedMins !== null && actualMins !== null) {
+    const diff = actualMins - expectedMins;
+    if (diff >= 20) return 'Delayed';
+    if (diff <= -15) return 'Early';
+    return 'On Time';
+  }
+
+  const normalizedStatus = normalizeStatus(rawStatus);
   if (normalizedStatus.includes('delayed')) {
     return 'Delayed';
   }
 
-  const scheduledMins = toLocalMinutesOfDay(scheduledIso);
-  const estimatedMins = toLocalMinutesOfDay(estimatedIso);
+  if (normalizedStatus.includes('early')) {
+    return 'Early';
+  }
 
-  if (scheduledMins !== null && estimatedMins !== null) {
-    if (scheduledMins < estimatedMins) return 'Delayed';
-    if (scheduledMins > estimatedMins) return 'Early';
+  if (normalizedStatus.includes('on time')) {
     return 'On Time';
   }
 
-  const derivedStatus = deriveStatus(scheduledIso, estimatedIso);
-  const normalizedDerived = normalizeStatus(derivedStatus);
-  if (normalizedDerived === 'delayed') {
-    return 'Delayed';
-  }
-
-  return rawStatus || derivedStatus;
+  return rawStatus || deriveStatus(expectedIso, actualIso);
 }
 
 function stripRawTime(flight) {
@@ -182,18 +184,19 @@ export const fetchFlightData = async () => {
     const originCity  = f.origin?.city ?? originCode ?? '–';
     const scheduledOn = f.scheduled_on ?? null;
     const estimatedOn = f.estimated_on ?? null;
-    const displayStatus = computeDisplayStatus('arrivals', f.status, scheduledOn, estimatedOn);
-    const primaryArrivalTime = scheduledOn ?? estimatedOn ?? null;
+    const actualOn = f.actual_on ?? estimatedOn ?? null;
+    const displayStatus = computeDisplayStatus('arrivals', f.status, scheduledOn, actualOn);
+    const primaryArrivalTime = scheduledOn ?? actualOn ?? null;
     arrivals.push({
       flight:    f.ident ?? '–',
       airline:   resolveAirline(originCity),
       from:      originCity,
       fromCode:  originCode,
       expected:  formatDatetime(scheduledOn),
-      actual:    formatDatetime(estimatedOn),
+      actual:    formatDatetime(actualOn),
       status:    displayStatus,
       isTomorrow: isTomorrowFlight(primaryArrivalTime),
-      rawTime:   scheduledOn ?? estimatedOn ?? '',
+      rawTime:   scheduledOn ?? actualOn ?? '',
     });
   }
   arrivals.sort((a, b) => a.rawTime.localeCompare(b.rawTime));
@@ -206,18 +209,19 @@ export const fetchFlightData = async () => {
     const destCode   = f.destination?.code ?? '';
     const scheduledOff = f.scheduled_off ?? null;
     const estimatedOff = f.estimated_off ?? null;
-    const displayStatus = computeDisplayStatus('departures', f.status, scheduledOff, estimatedOff);
-    const primaryDepartureTime = scheduledOff ?? estimatedOff ?? null;
+    const actualOff = f.actual_off ?? estimatedOff ?? null;
+    const displayStatus = computeDisplayStatus('departures', f.status, scheduledOff, actualOff);
+    const primaryDepartureTime = scheduledOff ?? actualOff ?? null;
     departures.push({
       flight:    f.ident ?? '–',
       airline:   resolveAirline(destCity),
       to:        destCity,
       toCode:    destCode,
       schedule:  formatDatetime(scheduledOff),
-      actual:    formatDatetime(estimatedOff),
+      actual:    formatDatetime(actualOff),
       status:    displayStatus,
       isTomorrow: isTomorrowFlight(primaryDepartureTime),
-      rawTime:   scheduledOff ?? estimatedOff ?? '',
+      rawTime:   scheduledOff ?? actualOff ?? '',
     });
   }
   departures.sort((a, b) => a.rawTime.localeCompare(b.rawTime));
