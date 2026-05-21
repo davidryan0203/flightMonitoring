@@ -29,7 +29,7 @@ const Header = ({ lastUpdated, onRefresh, isRefreshing, onOpenAdmin }) => {
           <div className="clock">{time.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
           <div className="date">{dateStr}</div>
         </div>
-        <div className="update-info">
+        {/* <div className="update-info">
           {lastUpdated && (
             <span className="last-updated">
               Updated: {lastUpdated.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}
@@ -41,7 +41,7 @@ const Header = ({ lastUpdated, onRefresh, isRefreshing, onOpenAdmin }) => {
           <button className="admin-btn" onClick={onOpenAdmin} title="Open admin controls">
             Admin
           </button>
-        </div>
+        </div> */}
       </div>
     </header>
   );
