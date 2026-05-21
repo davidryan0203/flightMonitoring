@@ -56,8 +56,8 @@ const FlightTable = ({ title, flights, type }) => {
               <th>Airline</th>
               <th>Flight #</th>
               <th>{isArrivals ? 'Origin' : 'Destination'}</th>
-              <th>{isArrivals ? 'Expected' : 'Schedule'}</th>
               <th>Actual</th>
+              <th>Expected</th>
               <th>Status</th>
             </tr>
           </thead>

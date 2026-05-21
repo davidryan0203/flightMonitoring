@@ -20,6 +20,7 @@ const GOOSE_BAY_AIRPORT = 'YYR';
 const FLIGHTAWARE_AIRPORT = 'CYYR';
 const TIMEZONE     = 'America/Goose_Bay';
 const PORT         = 3001;
+const INTELISYS_FLIGHT_TYPE_FILTER = 'flightType.code=S';
 
 // Public folder — JSON files are written here so the browser can fetch them
 const PUBLIC_DIR   = path.join(__dirname, 'public');
@@ -344,11 +345,11 @@ async function fetchAndSaveIntelisysData() {
 
   try {
     const [intelisysArrivals, intelisysDepartures] = await Promise.all([
-      fetchIntelisysStatuses(`arrivalAirport=${GOOSE_BAY_AIRPORT}&arrival=${dateKey}`).catch((err) => {
+      fetchIntelisysStatuses(`arrivalAirport=${GOOSE_BAY_AIRPORT}&arrival=${dateKey}&${INTELISYS_FLIGHT_TYPE_FILTER}`).catch((err) => {
         console.warn(`⚠️  Intelisys arrivals unavailable: ${err.message}`);
         return [];
       }),
-      fetchIntelisysStatuses(`departureAirport=${GOOSE_BAY_AIRPORT}&departure=${dateKey}`).catch((err) => {
+      fetchIntelisysStatuses(`departureAirport=${GOOSE_BAY_AIRPORT}&departure=${dateKey}&${INTELISYS_FLIGHT_TYPE_FILTER}`).catch((err) => {
         console.warn(`⚠️  Intelisys departures unavailable: ${err.message}`);
         return [];
       }),
