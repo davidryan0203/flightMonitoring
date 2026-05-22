@@ -12,6 +12,22 @@ const formatTimeDisplay = (value) =>
     .replace(/\b([ap])\s*\.?\s*m\.?\b/gi, (_, period) => `${period.toUpperCase()}M`)
     .replace(/\b(AM|PM)\.\s*$/i, '$1');
 
+// Filter out flights where actual time is more than 2 hours in the past
+const isFlightExpired = (flight) => {
+  // Use rawTime field which contains the actual ISO timestamp
+  if (!flight.rawTime) return false;
+  try {
+    const actualTime = new Date(flight.rawTime);
+    // Validate that the date parsed successfully
+    if (isNaN(actualTime.getTime())) return false;
+    const now = Date.now();
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    return (now - actualTime) > twoHoursMs;
+  } catch {
+    return false;
+  }
+};
+
 const AIRLINE_LOGOS = {
   'Air Canada':   airCanadaLogo,
   'PAL Airlines': palAirlineLogo,
@@ -42,12 +58,15 @@ const FlightTable = ({ title, flights, type }) => {
   const isArrivals = type === 'arrivals';
   const icon = isArrivals ? '\uD83D\uDEEC' : '\uD83D\uDEEB';
 
+  // Filter out flights with actual time more than 2 hours in the past
+  const activeFlights = flights.filter((flight) => !isFlightExpired(flight));
+
   return (
     <div className="flight-table-container">
       <div className="table-title-row">
         <span className="table-icon">{icon}</span>
         <h2>{title}</h2>
-        <span className="flight-count">{flights.length} flights</span>
+        <span className="flight-count">{activeFlights.length} flights</span>
       </div>
       <div className="table-body-wrapper">
         <table className="flight-table">
@@ -56,32 +75,32 @@ const FlightTable = ({ title, flights, type }) => {
               <th>Airline</th>
               <th>Flight #</th>
               <th>{isArrivals ? 'Origin' : 'Destination'}</th>
-              <th>Actual</th>
               <th>Expected</th>
+              <th>Actual</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
-            {flights.length === 0 ? (
+            {activeFlights.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                   No {title.toLowerCase()} to display for these airlines today.
                 </td>
               </tr>
             ) : (
-              flights.map((flight, index) => (
+              activeFlights.map((flight, index) => (
                 <tr key={flight.id ?? `${flight.flight}-${index}`}>
                   <td><AirlineBadge airline={flight.airline} /></td>
                   <td className="flight-cell">{flight.flight}</td>
                   <td>{isArrivals ? (flight.from || '\u2014') : (flight.to || '\u2014')}</td>
+                  <td className="time-cell actual-time">
+                    {formatTimeDisplay(flight.actual)}
+                  </td>
                   <td className="time-cell">
                     <span className="time-with-badge">
                       {formatTimeDisplay(isArrivals ? flight.expected : flight.schedule)}
                       {flight.isTomorrow && <span className="day-badge"> Tomorrow</span>}
                     </span>
-                  </td>
-                  <td className="time-cell actual-time">
-                    {formatTimeDisplay(flight.actual)}
                   </td>
                   <td>
                     <span className={`status ${statusClass(flight.status)}`}>

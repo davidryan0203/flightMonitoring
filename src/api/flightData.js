@@ -107,6 +107,7 @@ function stripRawTime(flight) {
     toCode: flight.toCode,
     schedule: flight.schedule,
     isTomorrow: flight.isTomorrow,
+    rawTime: flight.rawTime,
   };
 }
 
