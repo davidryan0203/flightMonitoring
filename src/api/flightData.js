@@ -160,7 +160,11 @@ function processArrivals(rawArrivals = []) {
     // Prefer explicit `expected`/`actual` provided by the server (Intelisys mapping).
     const expectedIso = f.expected ?? f.estimated_on ?? f.estimated_in ?? null;
     const scheduledOn = f.actual ?? f.scheduled_on ?? f.scheduled_in ?? null;
-    const displayStatus = computeDisplayStatus('arrivals', f.status, scheduledOn, expectedIso);
+    let displayStatus = computeDisplayStatus('arrivals', f.status, scheduledOn, expectedIso);
+    // If Intelisys provides a flightLegStatus or cancelled flag, respect it
+    if (Boolean(f.cancelled) || Boolean(f.flightLegStatus?.cancelled)) {
+      displayStatus = 'Cancelled';
+    }
     const primaryArrivalTime = scheduledOn ?? expectedIso ?? null;
     arrivals.push({
       flight:    f.ident ?? '–',
@@ -188,7 +192,11 @@ function processDepartures(rawDepartures = []) {
     // Prefer explicit `expected`/`actual` fields when available on server-mapped objects
     const expectedOff = f.expected ?? f.estimated_off ?? f.estimated_out ?? null;
     const scheduledOff = f.actual ?? f.scheduled_off ?? f.scheduled_out ?? null;
-    const displayStatus = computeDisplayStatus('departures', f.status, scheduledOff, expectedOff);
+    let displayStatus = computeDisplayStatus('departures', f.status, scheduledOff, expectedOff);
+    // If Intelisys provides a flightLegStatus or cancelled flag, respect it
+    if (Boolean(f.cancelled) || Boolean(f.flightLegStatus?.cancelled)) {
+      displayStatus = 'Cancelled';
+    }
     const primaryDepartureTime = scheduledOff ?? expectedOff ?? null;
     departures.push({
       flight:    f.ident ?? '–',
