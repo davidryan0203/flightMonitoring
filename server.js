@@ -357,6 +357,9 @@ async function fetchAndSaveIntelisysData() {
 
     const intelisysArrivalRows = [];
     for (const status of intelisysArrivals) {
+      const flightNumber = String(status?.flightNumber ?? '').trim();
+      // Skip flights that don't start with 9 (filter out low-numbered flights like 001, 002, etc.)
+      if (!flightNumber.startsWith('9')) continue;
       for (const leg of (status?.legs ?? [])) {
         if (isIntelisysArrival(leg)) {
           intelisysArrivalRows.push(mapIntelisysFlight(status, leg, 'arrivals'));
@@ -366,6 +369,9 @@ async function fetchAndSaveIntelisysData() {
 
     const intelisysDepartureRows = [];
     for (const status of intelisysDepartures) {
+      const flightNumber = String(status?.flightNumber ?? '').trim();
+      // Skip flights that don't start with 9 (filter out low-numbered flights like 001, 002, etc.)
+      if (!flightNumber.startsWith('9')) continue;
       for (const leg of (status?.legs ?? [])) {
         if (isIntelisysDeparture(leg)) {
           intelisysDepartureRows.push(mapIntelisysFlight(status, leg, 'departures'));

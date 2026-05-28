@@ -21,7 +21,7 @@ const isFlightExpired = (flight) => {
     // Validate that the date parsed successfully
     if (isNaN(actualTime.getTime())) return false;
     const now = Date.now();
-    const twoHoursMs = 4 * 60 * 60 * 1000;
+    const twoHoursMs = 2 * 60 * 60 * 1000;
     return (now - actualTime) > twoHoursMs;
   } catch {
     return false;
