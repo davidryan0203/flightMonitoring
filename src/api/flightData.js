@@ -24,6 +24,15 @@ function formatDatetime(isoString) {
   } catch { return ''; }
 }
 
+function shiftDateByHours(isoString, hours = 0) {
+  if (!isoString || !hours) return isoString;
+
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString;
+
+  return new Date(date.getTime() + (hours * 60 * 60 * 1000));
+}
+
 function deriveStatus(scheduledIso, estimatedIso) {
   if (!scheduledIso || !estimatedIso) return 'Scheduled';
   const diff = (new Date(estimatedIso) - new Date(scheduledIso)) / 60000;
@@ -197,15 +206,17 @@ function processDepartures(rawDepartures = []) {
     if (Boolean(f.cancelled) || Boolean(f.flightLegStatus?.cancelled)) {
       displayStatus = 'Cancelled';
     }
-    const primaryDepartureTime = scheduledOff ?? expectedOff ?? null;
+    const displayExpectedOff = shiftDateByHours(expectedOff, -1);
+    const displayScheduledOff = shiftDateByHours(scheduledOff, -1);
+    const primaryDepartureTime = displayScheduledOff ?? displayExpectedOff ?? null;
     departures.push({
       flight:    f.ident ?? '–',
       airline:   resolveAirline(destCity),
       to:        destCity,
       toCode:    destCode,
       // Map UI: Expected (schedule column) = estimatedTime, Actual = scheduledTime
-      schedule:  formatDatetime(expectedOff),
-      actual:    formatDatetime(scheduledOff),
+      schedule:  formatDatetime(displayExpectedOff),
+      actual:    formatDatetime(displayScheduledOff),
       status:    displayStatus,
       isTomorrow: isTomorrowFlight(primaryDepartureTime),
       rawTime:   scheduledOff ?? expectedOff ?? '',
