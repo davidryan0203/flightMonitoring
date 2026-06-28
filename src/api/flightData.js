@@ -4,14 +4,7 @@ const ALLOWED_OPERATORS = new Set(['PVL', 'PB', 'ACA', 'AC']);
 const AIR_BOREALIS_CITIES = new Set(['Nain', 'Postville', 'Rigolet', 'Makkovik', 'Natuashish', 'Hopedale']);
 const EXCLUDED_ORIGIN = 'CVB2';
 
-// ── Live API (uncomment when quota resets) ────────────────────────────────────
-// const API_KEY = 'cUMXuU3rMbSQfiAGVIMa4qMHbJGXN9Z7';
-// const AERO_API_URL = '/aeroapi'; // Proxied via Vite → https://aeroapi.flightaware.com/aeroapi
-// const HOME_AIRPORT_CODE = 'CYYR';
-// const fetchWithKey = (url) =>
-//   fetch(url, { headers: { 'x-apikey': API_KEY } }).then(r => r.json());
-
-// ── Helpers (mirrors server.js logic) ────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function formatDatetime(isoString) {
   if (!isoString) return '';
   try {
@@ -24,15 +17,6 @@ function formatDatetime(isoString) {
   } catch { return ''; }
 }
 
-function shiftDateByHours(isoString, hours = 0) {
-  if (!isoString || !hours) return isoString;
-
-  const date = new Date(isoString);
-  if (Number.isNaN(date.getTime())) return isoString;
-
-  return new Date(date.getTime() + (hours * 60 * 60 * 1000));
-}
-
 function deriveStatus(scheduledIso, estimatedIso) {
   if (!scheduledIso || !estimatedIso) return 'Scheduled';
   const diff = (new Date(estimatedIso) - new Date(scheduledIso)) / 60000;
@@ -43,7 +27,6 @@ function deriveStatus(scheduledIso, estimatedIso) {
 
 function toLocalMinutesOfDay(isoString) {
   if (!isoString) return null;
-
   try {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: TIMEZONE,
@@ -57,33 +40,21 @@ function toLocalMinutesOfDay(isoString) {
     const rawMinute = Number(map.minute);
     const dayPeriod = (map.dayPeriod || '').toLowerCase();
 
-    if (Number.isNaN(rawHour) || Number.isNaN(rawMinute)) {
-      return null;
-    }
+    if (Number.isNaN(rawHour) || Number.isNaN(rawMinute)) return null;
 
     let hour24 = rawHour % 12;
-    if (dayPeriod.includes('p')) {
-      hour24 += 12;
-    }
+    if (dayPeriod.includes('p')) hour24 += 12;
 
     return hour24 * 60 + rawMinute;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-function normalizeStatus(status = '') {
-  return status.trim().toLowerCase();
-}
+function normalizeStatus(status = '') { return status.trim().toLowerCase(); }
 
 function computeDisplayStatus(type, rawStatus, scheduledIso, estimatedIso) {
   void type;
-
   const normalizedStatus = normalizeStatus(rawStatus);
-
-  if (normalizedStatus.includes('delayed')) {
-    return 'Delayed';
-  }
+  if (normalizedStatus.includes('delayed')) return 'Delayed';
 
   const scheduledMins = toLocalMinutesOfDay(scheduledIso);
   const estimatedMins = toLocalMinutesOfDay(estimatedIso);
@@ -95,10 +66,7 @@ function computeDisplayStatus(type, rawStatus, scheduledIso, estimatedIso) {
   }
 
   const derivedStatus = deriveStatus(scheduledIso, estimatedIso);
-  const normalizedDerived = normalizeStatus(derivedStatus);
-  if (normalizedDerived === 'delayed') {
-    return 'Delayed';
-  }
+  if (normalizeStatus(derivedStatus) === 'delayed') return 'Delayed';
 
   return rawStatus || derivedStatus;
 }
@@ -158,7 +126,6 @@ function isAllowedOperator(f) {
   );
 }
 
-// ── Helper: Process flights from a data source ────────────────────────────────
 function processArrivals(rawArrivals = []) {
   const arrivals = [];
   for (const f of rawArrivals) {
@@ -166,11 +133,11 @@ function processArrivals(rawArrivals = []) {
     const originCode = f.origin?.code ?? '';
     if (originCode === EXCLUDED_ORIGIN) continue;
     const originCity  = f.origin?.city ?? originCode ?? '–';
-    // Prefer explicit `expected`/`actual` provided by the server (Intelisys mapping).
+    
     const expectedIso = f.expected ?? f.estimated_on ?? f.estimated_in ?? null;
     const scheduledOn = f.actual ?? f.scheduled_on ?? f.scheduled_in ?? null;
     let displayStatus = computeDisplayStatus('arrivals', f.status, scheduledOn, expectedIso);
-    // If Intelisys provides a flightLegStatus or cancelled flag, respect it
+    
     if (Boolean(f.cancelled) || Boolean(f.flightLegStatus?.cancelled)) {
       displayStatus = 'Cancelled';
     }
@@ -180,7 +147,6 @@ function processArrivals(rawArrivals = []) {
       airline:   resolveAirline(originCity),
       from:      originCity,
       fromCode:  originCode,
-      // Map UI: Expected = estimatedTime, Actual = scheduledTime
       expected:  formatDatetime(expectedIso),
       actual:    formatDatetime(scheduledOn),
       status:    displayStatus,
@@ -198,25 +164,24 @@ function processDepartures(rawDepartures = []) {
     if (!isAllowedOperator(f)) continue;
     const destCity   = f.destination?.city ?? f.destination?.code ?? '–';
     const destCode   = f.destination?.code ?? '';
-    // Prefer explicit `expected`/`actual` fields when available on server-mapped objects
+    
     const expectedOff = f.expected ?? f.estimated_off ?? f.estimated_out ?? null;
     const scheduledOff = f.actual ?? f.scheduled_off ?? f.scheduled_out ?? null;
     let displayStatus = computeDisplayStatus('departures', f.status, scheduledOff, expectedOff);
-    // If Intelisys provides a flightLegStatus or cancelled flag, respect it
+    
     if (Boolean(f.cancelled) || Boolean(f.flightLegStatus?.cancelled)) {
       displayStatus = 'Cancelled';
     }
-    const displayExpectedOff = shiftDateByHours(expectedOff, -1);
-    const displayScheduledOff = shiftDateByHours(scheduledOff, -1);
-    const primaryDepartureTime = displayScheduledOff ?? displayExpectedOff ?? null;
+    
+    // FIX: Dropped manual shiftDateByHours offset entirely to sync with PAL Airline logs
+    const primaryDepartureTime = scheduledOff ?? expectedOff ?? null;
     departures.push({
       flight:    f.ident ?? '–',
       airline:   resolveAirline(destCity),
       to:        destCity,
       toCode:    destCode,
-      // Map UI: Expected (schedule column) = estimatedTime, Actual = scheduledTime
-      schedule:  formatDatetime(displayExpectedOff),
-      actual:    formatDatetime(displayScheduledOff),
+      schedule:  formatDatetime(expectedOff),
+      actual:    formatDatetime(scheduledOff),
       status:    displayStatus,
       isTomorrow: isTomorrowFlight(primaryDepartureTime),
       rawTime:   scheduledOff ?? expectedOff ?? '',
@@ -226,7 +191,6 @@ function processDepartures(rawDepartures = []) {
   return departures;
 }
 
-// ── Deduplication helper: Remove duplicate flights ────────────────────────────
 function deduplicateFlights(flights) {
   const seen = new Map();
   const unique = [];
@@ -240,18 +204,7 @@ function deduplicateFlights(flights) {
   return unique;
 }
 
-// ── Main fetch ────────────────────────────────────────────────────────────────
 export const fetchFlightData = async () => {
-  // ── Live API (uncomment when quota resets) ──────────────────────────────
-  // const [arrivalsData, departuresData] = await Promise.all([
-  //   fetchWithKey(`${AERO_API_URL}/airports/${HOME_AIRPORT_CODE}/flights/scheduled_arrivals`),
-  //   fetchWithKey(`${AERO_API_URL}/airports/${HOME_AIRPORT_CODE}/flights/scheduled_departures`),
-  // ]);
-  // const rawArrivals   = arrivalsData.scheduled_arrivals   ?? arrivalsData.flights   ?? [];
-  // const rawDepartures = departuresData.scheduled_departures ?? departuresData.flights ?? [];
-
-  // ── Local JSON (served from public/) ───────────────────────────────────
-  // Fetch both Intelisys and FlightAware data sources
   const [intelisysArrivalsRes, intelisysDeparturesRes, flightawareArrivalsRes, flightawareDeparturesRes] = await Promise.all([
     fetch('/arrivals.json').catch(() => null),
     fetch('/departures.json').catch(() => null),
@@ -268,17 +221,14 @@ export const fetchFlightData = async () => {
     const data = await intelisysArrivalsRes.json();
     intelisysArrivals = data.scheduled_arrivals ?? data.flights ?? [];
   }
-
   if (intelisysDeparturesRes?.ok) {
     const data = await intelisysDeparturesRes.json();
     intelisysDepartures = data.scheduled_departures ?? data.flights ?? [];
   }
-
   if (flightawareArrivalsRes?.ok) {
     const data = await flightawareArrivalsRes.json();
     flightawareArrivals = data.scheduled_arrivals ?? data.flights ?? [];
   }
-
   if (flightawareDeparturesRes?.ok) {
     const data = await flightawareDeparturesRes.json();
     flightawareDepartures = data.scheduled_departures ?? data.flights ?? [];
@@ -288,27 +238,16 @@ export const fetchFlightData = async () => {
     throw new Error('Failed to load flight data from any source.');
   }
 
-  // ── Merge and process Arrivals ─────────────────────────────────────────────
-  const allArrivals = [
-    ...processArrivals(intelisysArrivals),
-    ...processArrivals(flightawareArrivals),
-  ];
+  const allArrivals = [...processArrivals(intelisysArrivals), ...processArrivals(flightawareArrivals)];
   const arrivals = deduplicateFlights(allArrivals);
   arrivals.sort((a, b) => a.rawTime.localeCompare(b.rawTime));
 
-  // ── Merge and process Departures ───────────────────────────────────────────
-  const allDepartures = [
-    ...processDepartures(intelisysDepartures),
-    ...processDepartures(flightawareDepartures),
-  ];
+  const allDepartures = [...processDepartures(intelisysDepartures), ...processDepartures(flightawareDepartures)];
   const departures = deduplicateFlights(allDepartures);
   departures.sort((a, b) => a.rawTime.localeCompare(b.rawTime));
 
-  console.log(`Loaded ${arrivals.length} arrivals (Intelisys: ${intelisysArrivals.length}, FlightAware: ${flightawareArrivals.length})`);
-  console.log(`Loaded ${departures.length} departures (Intelisys: ${intelisysDepartures.length}, FlightAware: ${flightawareDepartures.length})`);
   return {
     arrivals:   arrivals.map(stripRawTime),
     departures: departures.map(stripRawTime),
   };
 };
-

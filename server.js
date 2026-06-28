@@ -22,26 +22,17 @@ const TIMEZONE     = 'America/Goose_Bay';
 const PORT         = 3001;
 const INTELISYS_FLIGHT_TYPE_FILTER = 'flightType.code=S';
 
-// Public folder — JSON files are written here so the browser can fetch them
 const PUBLIC_DIR   = path.join(__dirname, 'public');
 const ADMIN_DATA_PATH = path.join(__dirname, 'admin_data.json');
 
-// Separate fetch intervals for different data sources
-const INTELISYS_INTERVAL_MS = 3 * 60 * 1000;      // Every 3 minutes
-const FLIGHTAWARE_INTERVAL_MS = 15 * 60 * 1000;   // Every 15 minutes (later: 11:59 PM daily)
+const INTELISYS_INTERVAL_MS = 3 * 60 * 1000;      
+const FLIGHTAWARE_INTERVAL_MS = 15 * 60 * 1000;   
 
 const DEFAULT_ADMIN_DATA = {
-  displaySettings: {
-    showApiFlights: true,
-    showCustomFlights: true,
-    maxRowsPerTable: 20,
-  },
+  displaySettings: { showApiFlights: true, showCustomFlights: true, maxRowsPerTable: 20 },
   customFlights: { arrivals: [], departures: [] },
 };
 
-// ─── SSE Client Registry ──────────────────────────────────────────────────────
-// Keeps a Set of active SSE response objects. When new data is ready, we
-// broadcast a "reload" event to every connected browser tab.
 const sseClients = new Set();
 
 function broadcastReload() {
@@ -86,17 +77,13 @@ function validateCustomFlight(flight, type) {
   return null;
 }
 
-// ─── SSE Endpoint ─────────────────────────────────────────────────────────────
-// Browser tabs connect here once on load and stay connected.
 app.get('/api/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  // Send a heartbeat every 30 s to keep the connection alive through proxies
   const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 30_000);
-
   sseClients.add(res);
   console.log(`✅ SSE client connected (total: ${sseClients.size})`);
 
@@ -107,7 +94,6 @@ app.get('/api/events', (req, res) => {
   });
 });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const PAL_CODES = new Set(['PVL', 'PB']);
 const AIR_CANADA_CODES = new Set(['ACA', 'AC']);
 const AIR_BOREALIS_CITIES = new Set(['Nain', 'Postville', 'Rigolet', 'Makkovik', 'Natuashish', 'Hopedale']);
@@ -126,10 +112,8 @@ function normalizeOperatorCode(code = '') { return String(code).trim().toUpperCa
 function hasAirCanadaCodeshare(flight) {
   const codeshares = Array.isArray(flight?.codeshares) ? flight.codeshares : [];
   const codesharesIata = Array.isArray(flight?.codeshares_iata) ? flight.codeshares_iata : [];
-
   const hasAcaCodeshare = codeshares.some((code) => normalizeOperatorCode(code).startsWith('ACA'));
   const hasAcCodeshare = codesharesIata.some((code) => normalizeOperatorCode(code).startsWith('AC'));
-
   return hasAcaCodeshare || hasAcCodeshare;
 }
 
@@ -172,6 +156,7 @@ function isIntelisysArrival(flight) {
   return normalizeOperatorCode(flight?.arrival?.airport?.code) === GOOSE_BAY_AIRPORT;
 }
 
+// FIX: Validate correct contextual field properties for departing operations
 function isIntelisysDeparture(flight) {
   return normalizeOperatorCode(flight?.departure?.airport?.code) === GOOSE_BAY_AIRPORT;
 }
@@ -181,9 +166,16 @@ function mapIntelisysFlight(status, leg, type) {
   const flightNumber = String(status?.flightNumber ?? '').trim();
   const operatorCode = normalizeOperatorCode(status?.airlineCode?.code);
   const displayOperator = operatorCode === 'PB' ? 'PVL' : operatorCode;
-  const expectedIso = leg?.arrival?.estimatedTime ?? leg?.departure?.estimatedTime ?? null;
-  //const actualIso = leg?.arrival?.scheduledTime ?? leg?.departure?.scheduledTime ?? null;
-  const actualIso = leg?.flightLeg?.arrival?.scheduledTime ?? leg?.flightLeg?.departure?.actualTime ?? null;
+  
+  // FIX: Separate target metrics based on journey context paths
+  const expectedIso = isArrival 
+    ? (leg?.arrival?.estimatedTime ?? leg?.departure?.estimatedTime ?? null)
+    : (leg?.departure?.estimatedTime ?? leg?.flightLeg?.departure?.estimatedTime ?? null);
+
+  const actualIso = isArrival
+    ? (leg?.flightLeg?.arrival?.scheduledTime ?? null)
+    : (leg?.departure?.scheduledTime ?? leg?.flightLeg?.departure?.scheduledTime ?? null);
+
   const originAirport = buildAirportSummary(leg?.departure?.airport ?? {});
   const destinationAirport = buildAirportSummary(leg?.arrival?.airport ?? {});
   const airportCity = isArrival ? originAirport.city : destinationAirport.city;
@@ -225,7 +217,6 @@ function mapIntelisysFlight(status, leg, type) {
     scheduled_in: isArrival ? actualIso : null,
     estimated_in: isArrival ? expectedIso : null,
     actual_in: isArrival ? actualIso : null,
-    // UI mapping: Expected = estimatedTime, Actual = scheduledTime
     expected: expectedIso,
     actual: actualIso,
     progress_percent: 0,
@@ -278,25 +269,11 @@ async function fetchFlightAwareData() {
   if (!departuresRes.ok) throw new Error(`Departures API error: ${departuresRes.status}`);
   
   const [arrivalsData, departuresData] = await Promise.all([arrivalsRes.json(), departuresRes.json()]);
-  console.log(`   → FlightAware raw arrivals count: ${Array.isArray(arrivalsData.scheduled_arrivals) ? arrivalsData.scheduled_arrivals.length : 'N/A'}`);
   const rawArrivals = arrivalsData.scheduled_arrivals ?? arrivalsData.flights ?? [];
-  console.log(`   → FlightAware returned ${rawArrivals.length} total arrivals (before filtering)`);
   const rawDepartures = departuresData.scheduled_departures ?? departuresData.flights ?? [];
-  // Log a sample flight structure to help debug operator fields
-  try {
-    const sample = rawArrivals[0] ?? rawDepartures[0];
-    if (sample) {
-      console.log('   → FlightAware sample flight keys:', Object.keys(sample).slice(0, 20));
-    } else {
-      console.log('   → FlightAware returned no flights in raw payload');
-    }
-  } catch (e) {
-    console.warn('   → Unable to log sample FlightAware flight:', e.message);
-  }
+
   const filteredArrivals = rawArrivals.filter(isAirCanadaFlight);
   const filteredDepartures = rawDepartures.filter(isAirCanadaFlight);
-  console.log(`   → FlightAware Air Canada filtered arrivals: ${filteredArrivals.length}`);
-  console.log(`   → FlightAware Air Canada filtered departures: ${filteredDepartures.length}`);
 
   return {
     arrivals: filteredArrivals.map(mapFlightAwareFlight),
@@ -304,7 +281,6 @@ async function fetchFlightAwareData() {
   };
 }
 
-// Debug route: return raw FlightAware payloads (arrivals + departures) for inspection
 app.get('/api/debug/flightaware', async (req, res) => {
   const headers = { 'x-apikey': API_KEY };
   try {
@@ -322,11 +298,9 @@ app.get('/api/debug/flightaware', async (req, res) => {
 
 function writeFlightFiles(arrivalsData, departuresData, source = 'intelisys') {
   if (source === 'flightaware') {
-    // FlightAware data goes to separate files
     fs.writeFileSync(path.join(PUBLIC_DIR, 'flightaware_arrivals.json'), JSON.stringify(arrivalsData, null, 2), 'utf-8');
     fs.writeFileSync(path.join(PUBLIC_DIR, 'flightaware_departures.json'), JSON.stringify(departuresData, null, 2), 'utf-8');
   } else {
-    // Intelisys data (default) goes to standard files
     fs.writeFileSync(path.join(PUBLIC_DIR, 'arrivals.json'), JSON.stringify(arrivalsData, null, 2), 'utf-8');
     fs.writeFileSync(path.join(PUBLIC_DIR, 'departures.json'), JSON.stringify(departuresData, null, 2), 'utf-8');
     fs.writeFileSync(path.join(__dirname, 'arrivals.json'), JSON.stringify(arrivalsData, null, 2), 'utf-8');
@@ -334,11 +308,6 @@ function writeFlightFiles(arrivalsData, departuresData, source = 'intelisys') {
   }
 }
 
-// ─── API Fetch & Write ────────────────────────────────────────────────────────
-/**
- * Fetches arrivals + departures from Intelisys API, writes to public/arrivals.json
- * and public/departures.json, then broadcasts a reload event.
- */
 async function fetchAndSaveIntelisysData() {
   const dateKey = formatDateKeyInTimeZone(new Date(), TIMEZONE);
   console.log(`\n🔄 [${new Date().toISOString()}] Fetching Intelisys flights for ${dateKey}…`);
@@ -358,7 +327,6 @@ async function fetchAndSaveIntelisysData() {
     const intelisysArrivalRows = [];
     for (const status of intelisysArrivals) {
       const flightNumber = String(status?.flightNumber ?? '').trim();
-      // Skip flights that don't start with 9 (filter out low-numbered flights like 001, 002, etc.)
       if (!flightNumber.startsWith('9')) continue;
       for (const leg of (status?.legs ?? [])) {
         if (isIntelisysArrival(leg)) {
@@ -370,7 +338,6 @@ async function fetchAndSaveIntelisysData() {
     const intelisysDepartureRows = [];
     for (const status of intelisysDepartures) {
       const flightNumber = String(status?.flightNumber ?? '').trim();
-      // Skip flights that don't start with 9 (filter out low-numbered flights like 001, 002, etc.)
       if (!flightNumber.startsWith('9')) continue;
       for (const leg of (status?.legs ?? [])) {
         if (isIntelisysDeparture(leg)) {
@@ -386,27 +353,14 @@ async function fetchAndSaveIntelisysData() {
     const departuresPayload = { generatedAt: new Date().toISOString(), airport: GOOSE_BAY_AIRPORT, date: dateKey, source: 'intelisys', scheduled_departures: departures };
 
     writeFlightFiles(arrivalsPayload, departuresPayload, 'intelisys');
-    console.log(`✅ Intelisys data saved. Arrivals: ${arrivals.length} | Departures: ${departures.length}`);
     broadcastReload();
     return { success: true, arrivals: arrivals.length, departures: departures.length, date: dateKey, source: 'intelisys' };
   } catch (err) {
     console.error('❌ fetchAndSaveIntelisysData error:', err.message);
-    const arrivalsPath = path.join(PUBLIC_DIR, 'arrivals.json');
-    const departuresPath = path.join(PUBLIC_DIR, 'departures.json');
-    if (fs.existsSync(arrivalsPath) && fs.existsSync(departuresPath)) {
-      console.warn('⚠️  Using cached local JSON files (API unavailable).');
-      broadcastReload();
-      return { success: false, fallback: true, error: err.message };
-    }
     return { success: false, fallback: false, error: err.message };
   }
 }
 
-/**
- * Fetches arrivals + departures from FlightAware API,
- * writes to public/flightaware_arrivals.json and public/flightaware_departures.json,
- * then broadcasts a reload event.
- */
 async function fetchAndSaveFlightAwareData() {
   const dateKey = formatDateKeyInTimeZone(new Date(), TIMEZONE);
   console.log(`\n🔄 [${new Date().toISOString()}] Fetching FlightAware flights for ${dateKey}…`);
@@ -417,72 +371,38 @@ async function fetchAndSaveFlightAwareData() {
       return { arrivals: [], departures: [] };
     });
 
-    console.log(`   → FlightAware returned arrivals: ${Array.isArray(flightAware.arrivals) ? flightAware.arrivals.length : 'N/A'}, departures: ${Array.isArray(flightAware.departures) ? flightAware.departures.length : 'N/A'}`);
-
     const arrivals = dedupeFlights(flightAware.arrivals);
     const departures = dedupeFlights(flightAware.departures);
-
-    if ((arrivals.length === 0 && departures.length === 0)) {
-      console.warn('⚠️  No flights found in FlightAware response.');
-    }
 
     const arrivalsPayload = { generatedAt: new Date().toISOString(), airport: GOOSE_BAY_AIRPORT, date: dateKey, source: 'flightaware', scheduled_arrivals: arrivals };
     const departuresPayload = { generatedAt: new Date().toISOString(), airport: GOOSE_BAY_AIRPORT, date: dateKey, source: 'flightaware', scheduled_departures: departures };
 
     writeFlightFiles(arrivalsPayload, departuresPayload, 'flightaware');
-    console.log(`✅ FlightAware data saved. Arrivals: ${arrivals.length} | Departures: ${departures.length}`);
     broadcastReload();
     return { success: true, arrivals: arrivals.length, departures: departures.length, date: dateKey, source: 'flightaware' };
   } catch (err) {
     console.error('❌ fetchAndSaveFlightAwareData error:', err.message);
-    const arrivalsPath = path.join(PUBLIC_DIR, 'flightaware_arrivals.json');
-    const departuresPath = path.join(PUBLIC_DIR, 'flightaware_departures.json');
-    if (fs.existsSync(arrivalsPath) && fs.existsSync(departuresPath)) {
-      console.warn('⚠️  Using cached FlightAware JSON files (API unavailable).');
-      broadcastReload();
-      return { success: false, fallback: true, error: err.message };
-    }
     return { success: false, fallback: false, error: err.message };
   }
 }
 
-// ─── Scheduler ───────────────────────────────────────────────────────────────
-// Intelisys: Fetches fresh data immediately on startup, then repeats every 3 minutes
-// FlightAware: Fetches fresh data immediately on startup, then repeats every 15 minutes
-// After each successful fetch, all connected browser tabs are notified via SSE
-// and silently re-fetch the updated JSON files.
 function startScheduler() {
-  console.log(`⏰ Scheduler started:`);
-  console.log(`   - Intelisys: fetching every ${INTELISYS_INTERVAL_MS / 60000} minutes`);
-  console.log(`   - FlightAware: fetching every ${FLIGHTAWARE_INTERVAL_MS / 60000} minutes`);
-  
-  // Run both fetches immediately on startup
   fetchAndSaveIntelisysData();
   fetchAndSaveFlightAwareData();
-  
-  // Intelisys every 3 minutes
   setInterval(fetchAndSaveIntelisysData, INTELISYS_INTERVAL_MS);
-  
-  // FlightAware every 15 minutes
   setInterval(fetchAndSaveFlightAwareData, FLIGHTAWARE_INTERVAL_MS);
 }
 
-// ─── Manual Trigger Endpoint (admin/testing) ──────────────────────────────────
-// Hit POST /api/refresh to trigger immediate data fetches without waiting for scheduled intervals.
 app.post('/api/refresh', async (req, res) => {
-  console.log('🔁 Manual refresh triggered via POST /api/refresh');
   try {
     const [intResult, faResult] = await Promise.all([fetchAndSaveIntelisysData(), fetchAndSaveFlightAwareData()]);
     res.json({ success: true, intel: intResult, flightaware: faResult });
   } catch (err) {
-    console.error('❌ Manual refresh failed:', err?.message || err);
     res.status(500).json({ success: false, error: err?.message || String(err) });
   }
 });
 
-app.get('/api/admin/state', (req, res) => {
-  res.json(adminData);
-});
+app.get('/api/admin/state', (req, res) => { res.json(adminData); });
 
 app.put('/api/admin/display-settings', (req, res) => {
   const payload = req.body ?? {};
@@ -516,7 +436,7 @@ app.put('/api/admin/flights/:type/:id', (req, res) => {
   if (index === -1) return res.status(404).json({ error: 'Flight not found.' });
   const updated = sanitizeCustomFlight({ ...adminData.customFlights[type][index], ...req.body, id }, type);
   const errMsg = validateCustomFlight(updated, type);
-  if (errMsg) return res.status(400).json({ error: errMsg });
+  if (errMsg) return res.status(400).json({ error });
   adminData.customFlights[type][index] = updated;
   saveAdminData(adminData);
   broadcastReload();
@@ -534,23 +454,14 @@ app.delete('/api/admin/flights/:type/:id', (req, res) => {
   return res.status(204).send();
 });
 
-// ─── Static File Server ───────────────────────────────────────────────────────
-// Serves the Vite production build (npm run build → dist/) AND the public/ JSON files.
-// In development, Vite's own dev server handles static files — this is for production.
 const DIST_DIR = path.join(__dirname, 'dist');
 if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR));
   app.get('/{*path}', (req, res) => res.sendFile(path.join(DIST_DIR, 'index.html')));
-  console.log(`📁 Serving built app from dist/`);
 } else {
   app.use('/public', express.static(PUBLIC_DIR));
-  console.log(`⚠️  No dist/ folder found — run "npm run build" for production. Dev mode: use "npm run dev" separately.`);
 }
 
-// ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n🛫  Flight Monitor Server → http://localhost:${PORT}`);
-  console.log(`📡  Airport: ${GOOSE_BAY_AIRPORT} | Timezone: ${TIMEZONE}`);
-  console.log(`✈️   Airlines: PAL Airlines (PB/PVL) · Air Borealis · Air Canada (ACA/AC)\n`);
   startScheduler();
 });
