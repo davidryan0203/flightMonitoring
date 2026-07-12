@@ -1,253 +1,201 @@
 // ── Configuration ────────────────────────────────────────────────────────────
-const TIMEZONE        = 'America/Goose_Bay';
-const ALLOWED_OPERATORS = new Set(['PVL', 'PB', 'ACA', 'AC']);
-const AIR_BOREALIS_CITIES = new Set(['Nain', 'Postville', 'Rigolet', 'Makkovik', 'Natuashish', 'Hopedale']);
-const EXCLUDED_ORIGIN = 'CVB2';
+const TIMEZONE        = 'America/Goose_Bay'; //[cite: 3]
+const AIR_BOREALIS_CITIES = new Set(['Nain', 'Postville', 'Rigolet', 'Makkovik', 'Natuashish', 'Hopedale']); //[cite: 3]
+const EXCLUDED_ORIGIN = 'CVB2'; //[cite: 3]
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-function formatDatetime(isoString) {
-  if (!isoString) return '';
-  try {
-    return new Date(isoString).toLocaleTimeString('en-CA', {
-      timeZone: TIMEZONE,
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-  } catch { return ''; }
-}
+function formatDatetime(isoString) { //[cite: 3]
+  if (!isoString) return ''; //[cite: 3]
+  try { //[cite: 3]
+    return new Date(isoString).toLocaleTimeString('en-CA', { //[cite: 3]
+      timeZone: TIMEZONE, //[cite: 3]
+      hour: 'numeric', //[cite: 3]
+      minute: '2-digit', //[cite: 3]
+      hour12: true, //[cite: 3]
+    }); //[cite: 3]
+  } catch { return ''; } //[cite: 3]
+} //[cite: 3]
 
-function deriveStatus(scheduledIso, estimatedIso) {
-  if (!scheduledIso || !estimatedIso) return 'Scheduled';
-  const diff = (new Date(estimatedIso) - new Date(scheduledIso)) / 60000;
-  if (diff > 1)  return 'Delayed';
-  if (diff < -1) return 'Early';
-  return 'On Time';
-}
+function toLocalMinutesOfDay(isoString) { //[cite: 3]
+  if (!isoString) return null; //[cite: 3]
+  try { //[cite: 3]
+    const parts = new Intl.DateTimeFormat('en-CA', { //[cite: 3]
+      timeZone: TIMEZONE, //[cite: 3]
+      hour: 'numeric', //[cite: 3]
+      minute: '2-digit', //[cite: 3]
+      hour12: true, //[cite: 3]
+    }).formatToParts(new Date(isoString)); //[cite: 3]
 
-function toLocalMinutesOfDay(isoString) {
-  if (!isoString) return null;
-  try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: TIMEZONE,
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    }).formatToParts(new Date(isoString));
+    const map = Object.fromEntries(parts.map((part) => [part.type, part.value])); //[cite: 3]
+    const rawHour = Number(map.hour); //[cite: 3]
+    const rawMinute = Number(map.minute); //[cite: 3]
+    const dayPeriod = (map.dayPeriod || '').toLowerCase(); //[cite: 3]
 
-    const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-    const rawHour = Number(map.hour);
-    const rawMinute = Number(map.minute);
-    const dayPeriod = (map.dayPeriod || '').toLowerCase();
+    if (Number.isNaN(rawHour) || Number.isNaN(rawMinute)) return null; //[cite: 3]
+    let hour24 = rawHour % 12; //[cite: 3]
+    if (dayPeriod.includes('p')) hour24 += 12; //[cite: 3]
 
-    if (Number.isNaN(rawHour) || Number.isNaN(rawMinute)) return null;
+    return hour24 * 60 + rawMinute; //[cite: 3]
+  } catch { return null; } //[cite: 3]
+} //[cite: 3]
 
-    let hour24 = rawHour % 12;
-    if (dayPeriod.includes('p')) hour24 += 12;
+function deriveStatus(scheduledIso, estimatedIso) { //[cite: 3]
+  if (!scheduledIso || !estimatedIso) return 'On Time'; //[cite: 3]
+  const diff = (new Date(estimatedIso) - new Date(scheduledIso)) / 60000; //[cite: 3]
+  if (diff > 1)  return 'Delayed'; //[cite: 3]
+  if (diff < -1) return 'Early'; //[cite: 3]
+  return 'On Time'; //[cite: 3]
+} //[cite: 3]
 
-    return hour24 * 60 + rawMinute;
-  } catch { return null; }
-}
+function computeDisplayStatus(type, rawStatus, scheduledIso, estimatedIso) { //[cite: 3]
+  void type; //[cite: 3]
+  const cleanRaw = String(rawStatus || '').trim(); // Synchronized text normalize check
+  if (cleanRaw.toLowerCase() === 'scheduled' || cleanRaw.toLowerCase() === 'on time') return 'On Time'; //[cite: 3]
+  if (cleanRaw.toLowerCase().includes('delayed')) return 'Delayed'; //[cite: 3]
 
-function normalizeStatus(status = '') { return status.trim().toLowerCase(); }
+  const scheduledMins = toLocalMinutesOfDay(scheduledIso); //[cite: 3]
+  const estimatedMins = toLocalMinutesOfDay(estimatedIso); //[cite: 3]
 
-function computeDisplayStatus(type, rawStatus, scheduledIso, estimatedIso) {
-  void type;
-  const normalizedStatus = normalizeStatus(rawStatus);
-  if (normalizedStatus.includes('delayed')) return 'Delayed';
+  if (scheduledMins !== null && estimatedMins !== null) { //[cite: 3]
+    if (scheduledMins < estimatedMins) return 'Delayed'; //[cite: 3]
+    if (scheduledMins > estimatedMins) return 'Early'; //[cite: 3]
+    return 'On Time'; //[cite: 3]
+  } //[cite: 3]
 
-  const scheduledMins = toLocalMinutesOfDay(scheduledIso);
-  const estimatedMins = toLocalMinutesOfDay(estimatedIso);
+  return cleanRaw || deriveStatus(scheduledIso, estimatedIso); //[cite: 3]
+} //[cite: 3]
 
-  if (scheduledMins !== null && estimatedMins !== null) {
-    if (scheduledMins < estimatedMins) return 'Delayed';
-    if (scheduledMins > estimatedMins) return 'Early';
-    return 'On Time';
-  }
+function stripRawTime(flight) { //[cite: 3]
+  return { //[cite: 3]
+    flight: flight.flight, //[cite: 3]
+    airline: flight.airline, //[cite: 3]
+    from: flight.from, //[cite: 3]
+    fromCode: flight.fromCode, //[cite: 3]
+    expected: flight.expected, //[cite: 3]
+    actual: flight.actual, //[cite: 3]
+    status: flight.status, //[cite: 3]
+    to: flight.to, //[cite: 3]
+    toCode: flight.toCode, //[cite: 3]
+    schedule: flight.schedule, //[cite: 3]
+    isTomorrow: flight.isTomorrow, //[cite: 3]
+    rawTime: flight.rawTime, //[cite: 3]
+  }; //[cite: 3]
+} //[cite: 3]
 
-  const derivedStatus = deriveStatus(scheduledIso, estimatedIso);
-  if (normalizeStatus(derivedStatus) === 'delayed') return 'Delayed';
+function resolveAirline(city) { //[cite: 3]
+  if (city === 'Halifax') return 'Air Canada'; //[cite: 3]
+  if (AIR_BOREALIS_CITIES.has(city)) return 'Air Borealis'; //[cite: 3]
+  return 'PAL Airlines'; //[cite: 3]
+} //[cite: 3]
 
-  return rawStatus || derivedStatus;
-}
-
-function stripRawTime(flight) {
-  return {
-    flight: flight.flight,
-    airline: flight.airline,
-    from: flight.from,
-    fromCode: flight.fromCode,
-    expected: flight.expected,
-    actual: flight.actual,
-    status: flight.status,
-    to: flight.to,
-    toCode: flight.toCode,
-    schedule: flight.schedule,
-    isTomorrow: flight.isTomorrow,
-    rawTime: flight.rawTime,
-  };
-}
-
-function getDateParts(dateInput) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIMEZONE,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(new Date(dateInput));
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return { year: Number(map.year), month: Number(map.month), day: Number(map.day) };
-}
-
-function formatDateKey(parts) {
-  return [parts.year, String(parts.month).padStart(2, '0'), String(parts.day).padStart(2, '0')].join('-');
-}
-
-function isTomorrowFlight(isoString) {
-  if (!isoString) return false;
-  try {
-    const flightDateKey = formatDateKey(getDateParts(isoString));
-    const todayParts = getDateParts(Date.now());
-    const tomorrowUtc = new Date(Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day + 1));
-    const tomorrowKey = `${tomorrowUtc.getUTCFullYear()}-${String(tomorrowUtc.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrowUtc.getUTCDate()).padStart(2, '0')}`;
-    return flightDateKey === tomorrowKey;
-  } catch { return false; }
-}
-
-function resolveAirline(city) {
-  if (city === 'Halifax') return 'Air Canada';
-  if (AIR_BOREALIS_CITIES.has(city)) return 'Air Borealis';
-  return 'PAL Airlines';
-}
-
-function isAllowedOperator(f) {
-  return (
-    ALLOWED_OPERATORS.has(f.operator       ?? '') ||
-    ALLOWED_OPERATORS.has(f.operator_icao  ?? '') ||
-    ALLOWED_OPERATORS.has(f.operator_iata  ?? '')
-  );
-}
-
-function processArrivals(rawArrivals = []) {
-  const arrivals = [];
-  for (const f of rawArrivals) {
-    if (!isAllowedOperator(f)) continue;
-    const originCode = f.origin?.code ?? '';
-    if (originCode === EXCLUDED_ORIGIN) continue;
-    const originCity  = f.origin?.city ?? originCode ?? '–';
+// ── Ingestion Processors with 2-Hour Filter Cut-Offs ──────────────────────────
+function processArrivals(rawArrivals = [], cutoffTimestamp) { //[cite: 3]
+  const arrivals = []; //[cite: 3]
+  for (const f of rawArrivals) { //[cite: 3]
+    const originCode = f.origin?.code ?? ''; //[cite: 3]
+    if (originCode === EXCLUDED_ORIGIN) continue; //[cite: 3]
     
-    const expectedIso = f.expected ?? f.estimated_on ?? f.estimated_in ?? null;
-    const scheduledOn = f.actual ?? f.scheduled_on ?? f.scheduled_in ?? null;
-    let displayStatus = computeDisplayStatus('arrivals', f.status, scheduledOn, expectedIso);
+    const expectedIso = f.expected ?? f.estimated_on ?? f.estimated_in ?? null; //[cite: 3]
+    const scheduledOn = f.actual ?? f.scheduled_on ?? f.scheduled_in ?? null; //[cite: 3]
+    const rawTime = scheduledOn ?? expectedIso ?? ''; //[cite: 3]
+
+    // Time window cut-off filter check (drops rows older than 2 hours ago)
+    if (rawTime && new Date(rawTime).getTime() < cutoffTimestamp) continue;
+
+    const originCity  = f.origin?.city ?? originCode ?? '–'; //[cite: 3]
+    let displayStatus = computeDisplayStatus('arrivals', f.status, scheduledOn, expectedIso); //[cite: 3]
+    if (f.cancelled || f.flightLegStatus?.cancelled) displayStatus = 'Cancelled'; //[cite: 3]
+
+    arrivals.push({ //[cite: 3]
+      flight:    f.ident ?? '–', //[cite: 3]
+      airline:   resolveAirline(originCity), //[cite: 3]
+      from:      originCity, //[cite: 3]
+      fromCode:  originCode, //[cite: 3]
+      expected:  formatDatetime(expectedIso), //[cite: 3]
+      actual:    formatDatetime(scheduledOn), //[cite: 3]
+      status:    displayStatus, //[cite: 3]
+      isTomorrow: false, //[cite: 3]
+      rawTime:   rawTime, //[cite: 3]
+      source:    f.source ?? 'unknown', //[cite: 3]
+    }); //[cite: 3]
+  } //[cite: 3]
+  return arrivals; //[cite: 3]
+} //[cite: 3]
+
+function processDepartures(rawDepartures = [], cutoffTimestamp) { //[cite: 3]
+  const departures = []; //[cite: 3]
+  for (const f of rawDepartures) { //[cite: 3]
+    const expectedOff = f.expected ?? f.estimated_off ?? f.estimated_out ?? null; //[cite: 3]
+    const scheduledOff = f.actual ?? f.scheduled_off ?? f.scheduled_out ?? null; //[cite: 3]
+    const rawTime = scheduledOff ?? expectedOff ?? ''; //[cite: 3]
+
+    // Time window cut-off filter check (drops rows older than 2 hours ago)
+    if (rawTime && new Date(rawTime).getTime() < cutoffTimestamp) continue;
+
+    const destCity   = f.destination?.city ?? f.destination?.code ?? '–'; //[cite: 3]
+    const destCode   = f.destination?.code ?? ''; //[cite: 3]
+    let displayStatus = computeDisplayStatus('departures', f.status, scheduledOff, expectedOff); //[cite: 3]
+    if (f.cancelled || f.flightLegStatus?.cancelled) displayStatus = 'Cancelled'; //[cite: 3]
     
-    if (Boolean(f.cancelled) || Boolean(f.flightLegStatus?.cancelled)) {
-      displayStatus = 'Cancelled';
-    }
-    const primaryArrivalTime = scheduledOn ?? expectedIso ?? null;
-    arrivals.push({
-      flight:    f.ident ?? '–',
-      airline:   resolveAirline(originCity),
-      from:      originCity,
-      fromCode:  originCode,
-      expected:  formatDatetime(expectedIso),
-      actual:    formatDatetime(scheduledOn),
-      status:    displayStatus,
-      isTomorrow: isTomorrowFlight(primaryArrivalTime),
-      rawTime:   scheduledOn ?? expectedIso ?? '',
-      source:    f.source ?? 'unknown',
-    });
-  }
-  return arrivals;
-}
+    departures.push({ //[cite: 3]
+      flight:    f.ident ?? '–', //[cite: 3]
+      airline:   resolveAirline(destCity), //[cite: 3]
+      to:        destCity, //[cite: 3]
+      toCode:    destCode, //[cite: 3]
+      schedule:  formatDatetime(expectedOff), //[cite: 3]
+      actual:    formatDatetime(scheduledOff), //[cite: 3]
+      status:    displayStatus, //[cite: 3]
+      isTomorrow: false, //[cite: 3]
+      rawTime:   rawTime, //[cite: 3]
+      source:    f.source ?? 'unknown', //[cite: 3]
+    }); //[cite: 3]
+  } //[cite: 3]
+  return departures; //[cite: 3]
+} //[cite: 3]
 
-function processDepartures(rawDepartures = []) {
-  const departures = [];
-  for (const f of rawDepartures) {
-    if (!isAllowedOperator(f)) continue;
-    const destCity   = f.destination?.city ?? f.destination?.code ?? '–';
-    const destCode   = f.destination?.code ?? '';
-    
-    const expectedOff = f.expected ?? f.estimated_off ?? f.estimated_out ?? null;
-    const scheduledOff = f.actual ?? f.scheduled_off ?? f.scheduled_out ?? null;
-    let displayStatus = computeDisplayStatus('departures', f.status, scheduledOff, expectedOff);
-    
-    if (Boolean(f.cancelled) || Boolean(f.flightLegStatus?.cancelled)) {
-      displayStatus = 'Cancelled';
-    }
-    
-    // FIX: Dropped manual shiftDateByHours offset entirely to sync with PAL Airline logs
-    const primaryDepartureTime = scheduledOff ?? expectedOff ?? null;
-    departures.push({
-      flight:    f.ident ?? '–',
-      airline:   resolveAirline(destCity),
-      to:        destCity,
-      toCode:    destCode,
-      schedule:  formatDatetime(expectedOff),
-      actual:    formatDatetime(scheduledOff),
-      status:    displayStatus,
-      isTomorrow: isTomorrowFlight(primaryDepartureTime),
-      rawTime:   scheduledOff ?? expectedOff ?? '',
-      source:    f.source ?? 'unknown',
-    });
-  }
-  return departures;
-}
+function deduplicateFlights(flights) { //[cite: 3]
+  const seen = new Map(); //[cite: 3]
+  const unique = []; //[cite: 3]
+  for (const flight of flights) { //[cite: 3]
+    const key = `${flight.flight}|${flight.rawTime}`; //[cite: 3]
+    if (!seen.has(key)) { //[cite: 3]
+      seen.set(key, true); //[cite: 3]
+      unique.push(flight); //[cite: 3]
+    } //[cite: 4]
+  } //[cite: 3]
+  return unique; //[cite: 3]
+} //[cite: 3]
 
-function deduplicateFlights(flights) {
-  const seen = new Map();
-  const unique = [];
-  for (const flight of flights) {
-    const key = `${flight.flight}|${flight.rawTime}`;
-    if (!seen.has(key)) {
-      seen.set(key, true);
-      unique.push(flight);
-    }
-  }
-  return unique;
-}
+export const fetchFlightData = async () => { //[cite: 3]
+  const [intelisysArrivalsRes, intelisysDeparturesRes, flightawareArrivalsRes, flightawareDeparturesRes] = await Promise.all([ //[cite: 3]
+    fetch('/arrivals.json').catch(() => null), //[cite: 3]
+    fetch('/departures.json').catch(() => null), //[cite: 3]
+    fetch('/flightaware_arrivals.json').catch(() => null), //[cite: 3]
+    fetch('/flightaware_departures.json').catch(() => null), //[cite: 3]
+  ]); //[cite: 3]
 
-export const fetchFlightData = async () => {
-  const [intelisysArrivalsRes, intelisysDeparturesRes, flightawareArrivalsRes, flightawareDeparturesRes] = await Promise.all([
-    fetch('/arrivals.json').catch(() => null),
-    fetch('/departures.json').catch(() => null),
-    fetch('/flightaware_arrivals.json').catch(() => null),
-    fetch('/flightaware_departures.json').catch(() => null),
-  ]);
+  let intelisysArrivals = [], intelisysDepartures = [], flightawareArrivals = [], flightawareDepartures = []; //[cite: 3]
 
-  let intelisysArrivals = [];
-  let intelisysDepartures = [];
-  let flightawareArrivals = [];
-  let flightawareDepartures = [];
+  if (intelisysArrivalsRes?.ok) intelisysArrivals = (await intelisysArrivalsRes.json()).scheduled_arrivals ?? []; //[cite: 3]
+  if (intelisysDeparturesRes?.ok) intelisysDepartures = (await intelisysDeparturesRes.json()).scheduled_departures ?? []; //[cite: 3]
+  if (flightawareArrivalsRes?.ok) flightawareArrivals = (await flightawareArrivalsRes.json()).scheduled_arrivals ?? []; //[cite: 3]
+  if (flightawareDeparturesRes?.ok) flightawareDepartures = (await flightawareDeparturesRes.json()).scheduled_departures ?? []; //[cite: 3]
 
-  if (intelisysArrivalsRes?.ok) {
-    const data = await intelisysArrivalsRes.json();
-    intelisysArrivals = data.scheduled_arrivals ?? data.flights ?? [];
-  }
-  if (intelisysDeparturesRes?.ok) {
-    const data = await intelisysDeparturesRes.json();
-    intelisysDepartures = data.scheduled_departures ?? data.flights ?? [];
-  }
-  if (flightawareArrivalsRes?.ok) {
-    const data = await flightawareArrivalsRes.json();
-    flightawareArrivals = data.scheduled_arrivals ?? data.flights ?? [];
-  }
-  if (flightawareDeparturesRes?.ok) {
-    const data = await flightawareDeparturesRes.json();
-    flightawareDepartures = data.scheduled_departures ?? data.flights ?? [];
-  }
+  // Establish historical 2-hour filter threshold relative to the active execution runtime
+  const cutoffTimestamp = Date.now() - (2 * 3600 * 1000);
 
-  if (intelisysArrivals.length === 0 && intelisysDepartures.length === 0 && flightawareArrivals.length === 0 && flightawareDepartures.length === 0) {
-    throw new Error('Failed to load flight data from any source.');
-  }
+  const allArrivals = [...processArrivals(intelisysArrivals, cutoffTimestamp), ...processArrivals(flightawareArrivals, cutoffTimestamp)]; //[cite: 3]
+  const arrivals = deduplicateFlights(allArrivals); //[cite: 3]
+  
+  // Real chronological numeric sorting instead of character strings comparison matches
+  arrivals.sort((a, b) => new Date(a.rawTime).getTime() - new Date(b.rawTime).getTime());
 
-  const allArrivals = [...processArrivals(intelisysArrivals), ...processArrivals(flightawareArrivals)];
-  const arrivals = deduplicateFlights(allArrivals);
-  arrivals.sort((a, b) => a.rawTime.localeCompare(b.rawTime));
-
-  const allDepartures = [...processDepartures(intelisysDepartures), ...processDepartures(flightawareDepartures)];
-  const departures = deduplicateFlights(allDepartures);
-  departures.sort((a, b) => a.rawTime.localeCompare(b.rawTime));
+  const allDepartures = [...processDepartures(intelisysDepartures, cutoffTimestamp), ...processDepartures(flightawareDepartures, cutoffTimestamp)]; //[cite: 3]
+  const departures = deduplicateFlights(allDepartures); //[cite: 3]
+  departures.sort((a, b) => new Date(a.rawTime).getTime() - new Date(b.rawTime).getTime());
 
   return {
-    arrivals:   arrivals.map(stripRawTime),
-    departures: departures.map(stripRawTime),
+    arrivals:   arrivals.map(stripRawTime), //[cite: 3]
+    departures: departures.map(stripRawTime), //[cite: 3]
   };
 };
